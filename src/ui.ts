@@ -12,6 +12,10 @@ export interface Actions {
     toggleTwin(): void;
     cycleSpeed(): void;
     clearTrail(): void;
+    cycleColour(): void;
+    /** log10 of the time to show */
+    scrub(log: number): void;
+    toggleScrubPlay(): void;
 }
 
 export type Toggle = 'learn' | 'curve' | 'stats' | 'twin';
@@ -24,7 +28,18 @@ export interface Ui {
     setMap(text: string): void;
     setHint(text: string): void;
     setReadout(lines: string[]): void;
+    /** shown: null = everything so far */
+    setScrub(shown: number | null, reached: number, done: boolean): void;
+    setScrubPlaying(on: boolean): void;
+    setColour(mode: 'time' | 'arm'): void;
 }
+
+const ARMS: [string, string][] = [
+    ['TOP ↺', '#c5fb45'],
+    ['TOP ↻', '#45d9f2'],
+    ['BOTTOM ↺', '#9466ff'],
+    ['BOTTOM ↻', '#ff8f33'],
+];
 
 function button(
     label: string,
@@ -64,22 +79,59 @@ export function createUi(map: HTMLElement, pend: HTMLElement, a: Actions): Ui {
     zoomIn.classList.add('pd-btn-square');
     const curve = button('CURVE', 'Where it can never flip (C)', a.toggleCurve);
     const stats = button('STATS', 'Engine stats (H)', a.toggleStats);
+    const colour = button(
+        'TIME',
+        'Colour by time or by which arm flips (V)',
+        a.cycleColour,
+    );
     mapBar.append(
         zoomOut,
         zoomIn,
         button('RESET', 'Whole map (0)', a.reset),
         curve,
+        colour,
         stats,
     );
+
+    // log time slider, track doubles as the legend
+    const scrubRow = box('pd-scrub');
+    const scrubPlay = button(
+        '▶',
+        'Replay the map filling in',
+        a.toggleScrubPlay,
+    );
+    scrubPlay.classList.add('pd-btn-square');
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.className = 'pd-slider';
+    slider.min = '0';
+    slider.max = '3';
+    slider.step = '0.001';
+    slider.value = '3';
+    slider.setAttribute('aria-label', 'Show flips up to this time');
+    slider.addEventListener('input', () => a.scrub(Number(slider.value)));
+    const scrubText = document.createElement('output');
+    scrubText.className = 'pd-scrub-text';
+    scrubRow.append(scrubPlay, slider, scrubText);
+
+    const legend = document.createElement('span');
+    legend.className = 'pd-legend';
+    legend.hidden = true;
+    for (const [label, swatch] of ARMS) {
+        const item = document.createElement('span');
+        item.style.setProperty('--swatch', swatch);
+        item.textContent = label;
+        legend.append(item);
+    }
 
     const status = document.createElement('p');
     status.className = 'pd-status';
     const mapText = document.createElement('span');
     const hint = document.createElement('span');
     hint.className = 'pd-status-hint';
-    status.append(mapText, hint);
+    status.append(mapText, legend, hint);
 
-    map.append(brand, mapBar, status);
+    map.append(brand, scrubRow, mapBar, status);
 
     const readout = document.createElement('dl');
     readout.className = 'pd-readout';
@@ -110,7 +162,20 @@ export function createUi(map: HTMLElement, pend: HTMLElement, a: Actions): Ui {
     for (const el of Object.values(toggles))
         el.setAttribute('aria-pressed', 'false');
 
+    // hint is hidden on phones
+    const narrow = matchMedia('(max-width: 760px)');
+    function fitStatus(): void {
+        status.hidden =
+            !mapText.textContent &&
+            legend.hidden &&
+            (!hint.textContent || narrow.matches);
+    }
+
     let shown: string[] = [];
+    let dragging = false;
+    slider.addEventListener('pointerdown', () => (dragging = true));
+    slider.addEventListener('pointerup', () => (dragging = false));
+    slider.addEventListener('pointercancel', () => (dragging = false));
     return {
         setPressed(which, on) {
             toggles[which].setAttribute('aria-pressed', String(on));
@@ -123,9 +188,31 @@ export function createUi(map: HTMLElement, pend: HTMLElement, a: Actions): Ui {
         },
         setMap(text) {
             if (mapText.textContent !== text) mapText.textContent = text;
+            fitStatus();
         },
         setHint(text) {
             if (hint.textContent !== text) hint.textContent = text;
+            fitStatus();
+        },
+        setScrub(value, reached, done) {
+            const t = value ?? reached;
+            if (!dragging) slider.value = String(Math.log10(Math.max(1, t)));
+            const text =
+                value !== null
+                    ? `t ≤ ${t < 10 ? t.toFixed(1) : Math.round(t)}`
+                    : done
+                      ? 'ALL FLIPS'
+                      : `LIVE t ${Math.floor(reached)}`;
+            if (scrubText.textContent !== text) scrubText.textContent = text;
+        },
+        setScrubPlaying(on) {
+            scrubPlay.textContent = on ? '❚❚' : '▶';
+        },
+        setColour(mode) {
+            colour.textContent = mode === 'arm' ? 'ARM' : 'TIME';
+            scrubRow.dataset.mode = mode;
+            legend.hidden = mode !== 'arm';
+            fitStatus();
         },
         setReadout(lines) {
             if (lines.join('\n') === shown.join('\n')) return;

@@ -4,6 +4,7 @@ const PI = 3.14159265;
 const OUTSIDE = -2.0;
 const NEVER = -1.0;
 const TIMEOUT = 1e9;
+const CODE_SPAN = 2048.0;
 
 struct Grid {
     origin: vec2f,
@@ -19,6 +20,9 @@ struct Params {
     tMax: f32,
     steps: u32,
     prevValid: u32,
+    scrub: f32,
+    mode: u32,
+    pad: vec2u,
 }
 
 @group(0) @binding(0) var<uniform> P: Params;
@@ -55,6 +59,14 @@ fn rk4(s: vec4f, h: f32) -> vec4f {
     return s + (h / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4);
 }
 
+// arm · 2 + clockwise
+fn flip_code(s: vec4f) -> f32 {
+    if (abs(s.x) > PI) {
+        return select(1.0, 0.0, s.x > 0.0);
+    }
+    return select(3.0, 2.0, s.y > 0.0);
+}
+
 @compute @workgroup_size(8, 8)
 fn seed(@builtin(global_invocation_id) id: vec3u) {
     if (id.x >= P.cur.size.x || id.y >= P.cur.size.y) {
@@ -86,7 +98,7 @@ fn step(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_index) li: u
     for (var k = 1u; k <= P.steps; k++) {
         s = rk4(s, P.dt);
         if (abs(s.x) > PI || abs(s.y) > PI) {
-            result[i] = f32(clock + k) * P.dt;
+            result[i] = f32(clock + k) * P.dt + flip_code(s) * CODE_SPAN;
             return;
         }
     }

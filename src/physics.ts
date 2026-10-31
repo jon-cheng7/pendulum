@@ -110,3 +110,9 @@ export function boundary(samples: number): [number, number][] {
     }
     return points;
 }
+
+/** which arm went over and which way: arm · 2 + clockwise */
+export function flipCode(s: State): number {
+    if (Math.abs(s.t1) > Math.PI) return s.t1 > 0 ? 0 : 1;
+    return s.t2 > 0 ? 2 : 3;
+}

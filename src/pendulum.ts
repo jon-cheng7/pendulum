@@ -33,6 +33,8 @@ export interface Pendulum {
     setPlaying(on: boolean): void;
     setSpeed(speed: number): void;
     clearTrail(): void;
+    /** faint pose for a start under the pointer */
+    setGhost(angles: [number, number] | null): void;
     /** real seconds; true if anything moved */
     tick(dt: number): boolean;
 }
@@ -45,6 +47,7 @@ const PATH_T = 0.02;
 const MAX_STEPS_PER_TICK = 6000;
 const HIT_PX = 32;
 const MAX_DPR = 2;
+const RESIZE_MS = 120;
 
 const LIME = '#c5fb45';
 const CYAN = '#45f0fb';
@@ -94,6 +97,7 @@ export function createPendulum(
     let speed = 1;
     let sinceSample = 0;
     let dirty = true;
+    let ghost: [number, number] | null = null;
 
     const arm = (): number => Math.min(w, h) * 0.22;
     const pivot = (): [number, number] => [w / 2, h / 2];
@@ -110,6 +114,12 @@ export function createPendulum(
     }
 
     function resize(): void {
+        const oldArm = arm() * dpr;
+        const old = document.createElement('canvas');
+        old.width = trail.width;
+        old.height = trail.height;
+        old.getContext('2d')?.drawImage(trail, 0, 0);
+
         w = Math.max(1, root.clientWidth);
         h = Math.max(1, root.clientHeight);
         dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
@@ -117,13 +127,30 @@ export function createPendulum(
             c.width = Math.round(w * dpr);
             c.height = Math.round(h * dpr);
         }
-        trailCtx?.setTransform(dpr, 0, 0, dpr, 0, 0);
         armsCtx?.setTransform(dpr, 0, 0, dpr, 0, 0);
-        // trail can't be rescaled, start it fresh
+        if (trailCtx) {
+            // keep the trail: scale it about the pivot
+            const k = (arm() * dpr) / oldArm;
+            trailCtx.setTransform(1, 0, 0, 1, 0, 0);
+            trailCtx.drawImage(
+                old,
+                trail.width / 2 - (old.width / 2) * k,
+                trail.height / 2 - (old.height / 2) * k,
+                old.width * k,
+                old.height * k,
+            );
+            trailCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
         for (const run of runs) run.last = null;
         dirty = true;
     }
-    new ResizeObserver(resize).observe(root);
+
+    // first size now, later ones once a drag settles
+    let resizeTimer = 0;
+    new ResizeObserver(() => {
+        window.clearTimeout(resizeTimer);
+        resizeTimer = window.setTimeout(resize, RESIZE_MS);
+    }).observe(root);
     resize();
 
     function clearTrail(): void {
@@ -166,6 +193,26 @@ export function createPendulum(
         if (!armsCtx) return;
         armsCtx.clearRect(0, 0, w, h);
         const [px, py] = pivot();
+        if (ghost) {
+            const [b1, b2] = bobs(rest(ghost[0], ghost[1]));
+            armsCtx.strokeStyle = 'rgba(69,240,251,0.6)';
+            armsCtx.lineWidth = 1.5;
+            armsCtx.setLineDash([4, 4]);
+            armsCtx.beginPath();
+            armsCtx.moveTo(px, py);
+            armsCtx.lineTo(b1[0], b1[1]);
+            armsCtx.lineTo(b2[0], b2[1]);
+            armsCtx.stroke();
+            armsCtx.setLineDash([]);
+            for (const [[x, y], r] of [
+                [b1, 6],
+                [b2, 8],
+            ] as const) {
+                armsCtx.beginPath();
+                armsCtx.arc(x, y, r, 0, Math.PI * 2);
+                armsCtx.stroke();
+            }
+        }
         // twin underneath
         for (let i = runs.length - 1; i >= 0; i--) {
             const run = runs[i];
@@ -288,6 +335,10 @@ export function createPendulum(
             speed = next;
         },
         clearTrail,
+        setGhost(angles) {
+            ghost = angles;
+            dirty = true;
+        },
         tick(dt) {
             const moving = playing && drag === null && runs.length > 0;
             if (moving) advance((dt * speed) / SECONDS_PER_UNIT);

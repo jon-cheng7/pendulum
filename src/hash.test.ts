@@ -9,6 +9,7 @@ test('round trip', () => {
         view: { cx: 1.5, cy: -0.25, zoom: 40 },
         pick: [0.9, 1.7] as [number, number],
         twin: true,
+        arm: false,
     };
     assert.deepEqual(parseHash(`#${formatHash(s)}`), s);
 });
@@ -18,6 +19,12 @@ test('junk is ignored', () => {
         view: null,
         pick: null,
         twin: false,
+        arm: false,
     });
-    assert.deepEqual(parseHash(''), { view: null, pick: null, twin: false });
+    assert.deepEqual(parseHash(''), {
+        view: null,
+        pick: null,
+        twin: false,
+        arm: false,
+    });
 });

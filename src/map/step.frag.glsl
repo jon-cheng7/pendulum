@@ -5,6 +5,7 @@ precision highp float;
 
 const float PI = 3.14159265;
 const float TIMEOUT = 1e9;
+const float CODE_SPAN = 2048.0;
 
 uniform highp sampler2D uState;
 uniform highp sampler2D uResult;
@@ -40,6 +41,12 @@ vec4 rk4(vec4 s, float h) {
     return s + (h / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4);
 }
 
+// arm · 2 + clockwise
+float flipCode(vec4 s) {
+    if (abs(s.x) > PI) return s.x > 0.0 ? 0.0 : 1.0;
+    return s.y > 0.0 ? 2.0 : 3.0;
+}
+
 void main() {
     ivec2 p = ivec2(gl_FragCoord.xy);
     vec4 s = texelFetch(uState, p, 0);
@@ -51,7 +58,7 @@ void main() {
         s = rk4(s, uDt);
         if (abs(s.x) > PI || abs(s.y) > PI) {
             oState = s;
-            oResult = float(uBase + k) * uDt;
+            oResult = float(uBase + k) * uDt + flipCode(s) * CODE_SPAN;
             return;
         }
     }

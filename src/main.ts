@@ -5,12 +5,14 @@ import { formatHash, parseHash } from './hash.ts';
 import { attachMapInput } from './input.ts';
 import { createLearn } from './learn.ts';
 import { createLoop } from './loop.ts';
-import { gridFor, type MapEngine } from './map/engine.ts';
+import { gridFor, type Look, type MapEngine } from './map/engine.ts';
 import { createGlMap } from './map/gl.ts';
 import { createGpuMap } from './map/gpu.ts';
+import { PRIOR_GRID, loadPrior } from './map/prior.ts';
 import { createOverlay } from './overlay.ts';
 import { TWIN_GAP, createPendulum } from './pendulum.ts';
-import { SECONDS_PER_UNIT, T_MAX, canFlip, energy } from './physics.ts';
+import { SECONDS_PER_UNIT, canFlip, energy } from './physics.ts';
+import { createSplit } from './split.ts';
 import { createUi } from './ui.ts';
 import {
     fitView,
@@ -30,6 +32,9 @@ const DOUBLE_TAP_ZOOM = 0.4;
 const START: [number, number] = [0.9, 1.7];
 const READOUT_MS = 100;
 const GPU_WAIT_MS = 4000;
+const RESIZE_MS = 120;
+// replay: 1 → 1000 time units
+const REPLAY_MS = 7000;
 
 const coarse = matchMedia('(pointer: coarse)').matches;
 // map pixels cost most: cap below screen density
@@ -62,10 +67,15 @@ async function start(root: HTMLElement): Promise<void> {
     let engine: MapEngine | null = null;
     let lastReadout = 0;
     let frameMs: number | null = null;
+    let mapRedraw = false;
+    let replayFrom: number | null = null;
 
     const shared = parseHash(location.hash);
     twin = shared.twin;
+    let look: Look = { scrub: null, mode: shared.arm ? 'arm' : 'time' };
+    const prior = loadPrior();
 
+    createSplit(root);
     const drawOverlay = createOverlay(mapEl);
     const pendulum = createPendulum(pendEl, (_t1, _t2, live) => {
         overlayDirty = true;
@@ -89,6 +99,19 @@ async function start(root: HTMLElement): Promise<void> {
         toggleTwin: () => setTwin(!twin),
         cycleSpeed: () => cycleSpeed(),
         clearTrail: () => pendulum.clearTrail(),
+        cycleColour: () => cycleColour(),
+        scrub: (log) => {
+            stopReplay();
+            setLook({ ...look, scrub: log >= 2.999 ? null : 10 ** log });
+        },
+        toggleScrubPlay: () => {
+            if (replayFrom !== null) stopReplay();
+            else {
+                replayFrom = performance.now();
+                ui.setScrubPlaying(true);
+                loop.request();
+            }
+        },
     });
 
     const learn = createLearn(
@@ -112,7 +135,21 @@ async function start(root: HTMLElement): Promise<void> {
             mapBusy = true;
             overlayDirty = true;
         }
-        if (mapBusy && engine) mapBusy = engine.frame(frameMs);
+        if (replayFrom !== null) {
+            const log = (3 * (performance.now() - replayFrom)) / REPLAY_MS;
+            const reached = engine?.t ?? 0;
+            if (log >= 3 || 10 ** log >= reached) {
+                stopReplay();
+                setLook({ ...look, scrub: null });
+            } else {
+                setLook({ ...look, scrub: 10 ** log });
+            }
+        }
+        if ((mapBusy || mapRedraw) && engine) {
+            mapRedraw = false;
+            mapBusy = engine.frame(frameMs);
+        }
+        if (engine) ui.setScrub(look.scrub, engine.t, !mapBusy);
         if (pendulum.tick(dt)) overlayDirty = true;
         if (overlayDirty) {
             overlayDirty = false;
@@ -129,8 +166,27 @@ async function start(root: HTMLElement): Promise<void> {
             lastReadout = now;
             readouts();
         }
-        if (mapBusy || pendulum.playing) loop.request();
+        if (mapBusy || pendulum.playing || replayFrom !== null) loop.request();
     });
+
+    function setLook(next: Look): void {
+        look = next;
+        engine?.setLook(look);
+        mapRedraw = true;
+        loop.request();
+    }
+
+    function stopReplay(): void {
+        replayFrom = null;
+        ui.setScrubPlaying(false);
+    }
+
+    function cycleColour(): void {
+        const mode = look.mode === 'time' ? 'arm' : 'time';
+        ui.setColour(mode);
+        setLook({ ...look, mode });
+        syncHash();
+    }
 
     function setView(next: View): void {
         view = settle(next, css);
@@ -193,6 +249,7 @@ async function start(root: HTMLElement): Promise<void> {
                 view: atHome ? null : { cx: view.cx, cy: view.cy, zoom },
                 pick: pendulum.origin,
                 twin,
+                arm: look.mode === 'arm',
             });
             history.replaceState(null, '', `#${hash}`);
         }, 250);
@@ -233,25 +290,24 @@ async function start(root: HTMLElement): Promise<void> {
         }
         ui.setReadout(lines);
 
-        let text = '';
+        const parts: string[] = [];
         if (engine) {
-            const done = !mapBusy;
-            text = done
-                ? 'MAP DONE'
-                : `MAP t ${Math.floor(engine.t)} / ${T_MAX}`;
             const zoom = zoomLevel(view, css);
             if (zoom > 1.01)
-                text += ` · ${zoom < 10 ? zoom.toFixed(1) : Math.round(zoom)}×`;
+                parts.push(
+                    `${zoom < 10 ? zoom.toFixed(1) : Math.round(zoom)}×`,
+                );
             if (stats) {
                 const live = engine.live;
-                text += ` · ${engine.name} ${buffer.w}×${buffer.h} · ${engine.passes} PASS`;
+                let text = `${engine.name} ${buffer.w}×${buffer.h} · ${engine.passes} PASS`;
                 if (live !== null)
                     text += ` · ${live.toLocaleString('en')} LIVE`;
                 if (frameMs !== null)
                     text += ` · ${Math.round(1000 / Math.max(frameMs, 1))} FPS`;
+                parts.push(text);
             }
+            ui.setMap(parts.join(' · '));
         }
-        ui.setMap(text);
         if (hover) {
             const p = screenToPlane(view, css, hover.x, hover.y);
             ui.setHint(
@@ -280,9 +336,14 @@ async function start(root: HTMLElement): Promise<void> {
         doubleTap: (px, py) => zoomBy(DOUBLE_TAP_ZOOM, px, py),
         hover: (px, py) => {
             hover = { x: px, y: py };
+            const p = screenToPlane(view, css, px, py);
+            pendulum.setGhost(inSquare(p.x, p.y) ? [p.x, p.y] : null);
+            loop.request();
         },
         leave: () => {
             hover = null;
+            pendulum.setGhost(null);
+            loop.request();
         },
     });
     window.addEventListener('keydown', (e) => {
@@ -329,6 +390,9 @@ async function start(root: HTMLElement): Promise<void> {
                     case 't':
                         setTwin(!twin);
                         break;
+                    case 'v':
+                        cycleColour();
+                        break;
                     case 'r':
                         pick(...pendulum.origin);
                         break;
@@ -347,9 +411,7 @@ async function start(root: HTMLElement): Promise<void> {
         loop.request();
     });
 
-    new ResizeObserver((entries) => {
-        const rect = entries[entries.length - 1]?.contentRect;
-        if (!rect) return;
+    function applySize(rect: DOMRectReadOnly): void {
         const before = css;
         css = { w: Math.max(1, rect.width), h: Math.max(1, rect.height) };
         const dpr = Math.min(window.devicePixelRatio || 1, MAP_DPR);
@@ -357,8 +419,8 @@ async function start(root: HTMLElement): Promise<void> {
             w: Math.max(1, Math.round(css.w * dpr)),
             h: Math.max(1, Math.round(css.h * dpr)),
         };
-        canvas.width = buffer.w;
-        canvas.height = buffer.h;
+        surface.width = buffer.w;
+        surface.height = buffer.h;
         if (!fitted) {
             fitted = true;
             const v = shared.view;
@@ -387,6 +449,16 @@ async function start(root: HTMLElement): Promise<void> {
         viewDirty = true;
         overlayDirty = true;
         loop.request();
+    }
+
+    // first size now, later ones once a drag settles
+    let resizeTimer = 0;
+    new ResizeObserver((entries) => {
+        const rect = entries[entries.length - 1]?.contentRect;
+        if (!rect) return;
+        window.clearTimeout(resizeTimer);
+        if (!fitted) applySize(rect);
+        else resizeTimer = window.setTimeout(() => applySize(rect), RESIZE_MS);
     }).observe(mapEl);
 
     new IntersectionObserver((entries) => {
@@ -436,6 +508,7 @@ async function start(root: HTMLElement): Promise<void> {
     pendulum.setTwin(twin);
     ui.setPressed('twin', twin);
     ui.setPressed('stats', stats);
+    ui.setColour(look.mode);
     pick(t1, t2);
 
     engine = await makeEngine();
@@ -446,7 +519,14 @@ async function start(root: HTMLElement): Promise<void> {
         );
     }
     viewDirty = true;
+    engine?.setLook(look);
     loop.request();
+    void prior.then((data) => {
+        if (!data || !engine) return;
+        engine.setPrior(PRIOR_GRID, data);
+        mapRedraw = true;
+        loop.request();
+    });
 
     // first visit, no link: open lessons
     if (!shared.pick) learn.toggle();

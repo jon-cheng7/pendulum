@@ -80,6 +80,12 @@ body {
     display: block;
     width: 100%;
     height: 100%;
+    /* crop, don't squash, until a resize settles */
+    object-fit: cover;
+}
+
+.pd-split {
+    display: none;
 }
 
 .pd-overlay {
@@ -190,9 +196,8 @@ body {
 
 .pd-status {
     position: absolute;
+    top: var(--pd-gap);
     right: var(--pd-gap);
-    /* clear of the button bar */
-    bottom: calc(var(--pd-gap) * 2 + 3.1rem);
     display: flex;
     flex-direction: column;
     align-items: flex-end;
@@ -204,7 +209,8 @@ body {
     pointer-events: none;
 }
 
-.pd-status:empty {
+.pd-status[hidden],
+.pd-status > :empty {
     display: none;
 }
 
@@ -217,6 +223,109 @@ body {
     bottom: 50%;
     align-items: center;
     color: var(--pd-accent);
+}
+
+/* Time scrubber, above the map bar */
+
+.pd-scrub {
+    position: absolute;
+    bottom: calc(var(--pd-gap) * 2 + 3.1rem);
+    left: var(--pd-gap);
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    width: min(26rem, calc(100% - 2 * var(--pd-gap)));
+    padding: 0.35rem 0.75rem 0.35rem 0.35rem;
+    box-sizing: border-box;
+    border: 1px solid var(--pd-line);
+    border-radius: var(--pd-radius);
+    background: var(--pd-panel);
+}
+
+.pd-scrub-text {
+    min-width: 6.5rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+/* stops match the shader palette on the same log scale */
+.pd-slider {
+    --track: linear-gradient(
+        90deg,
+        rgb(18 15 38),
+        rgb(43 48 128) 25%,
+        rgb(43 153 173) 50%,
+        rgb(197 250 69) 75%,
+        rgb(255 255 230)
+    );
+    flex: 1;
+    min-width: 0;
+    height: 2.25rem;
+    margin: 0;
+    background: transparent;
+    cursor: pointer;
+    appearance: none;
+    touch-action: none;
+}
+
+.pd-scrub[data-mode='arm'] .pd-slider {
+    --track: linear-gradient(90deg, rgb(60 60 60), rgb(220 220 220));
+}
+
+.pd-slider::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--track);
+}
+
+.pd-slider::-moz-range-track {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--track);
+}
+
+.pd-slider::-webkit-slider-thumb {
+    width: 14px;
+    height: 14px;
+    margin-top: -4px;
+    border: 2px solid var(--pd-bg);
+    border-radius: 50%;
+    background: var(--pd-fg);
+    appearance: none;
+}
+
+.pd-slider::-moz-range-thumb {
+    width: 10px;
+    height: 10px;
+    border: 2px solid var(--pd-bg);
+    border-radius: 50%;
+    background: var(--pd-fg);
+}
+
+.pd-slider:focus-visible {
+    outline: 1px solid var(--pd-accent);
+    outline-offset: 2px;
+}
+
+.pd-legend {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.3rem 0.8rem;
+}
+
+.pd-legend[hidden] {
+    display: none;
+}
+
+.pd-legend span::before {
+    content: '';
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-right: 0.4em;
+    border-radius: 2px;
+    background: var(--swatch);
 }
 
 /* Pendulum chrome */
@@ -357,12 +466,61 @@ body {
 @media (max-width: 760px) {
     .pd-app {
         grid-template-columns: 1fr;
-        grid-template-rows: minmax(0, 55fr) minmax(0, 45fr);
+        grid-template-rows: minmax(0, var(--split, 55%)) minmax(0, 1fr);
+    }
+
+    /* tall touch target, thin grip */
+    .pd-split {
+        position: absolute;
+        top: var(--split, 55%);
+        right: 0;
+        left: 0;
+        z-index: 3;
+        display: block;
+        height: 1.5rem;
+        translate: 0 -50%;
+        cursor: row-resize;
+        touch-action: none;
+        outline: none;
+    }
+
+    .pd-split::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 3rem;
+        height: 4px;
+        border-radius: 2px;
+        background: var(--pd-line-strong);
+        translate: -50% -50%;
+        transition:
+            background-color 0.15s,
+            width 0.15s;
+    }
+
+    .pd-split[data-active]::before,
+    .pd-split:focus-visible::before {
+        width: 4.5rem;
+        background: var(--pd-accent);
     }
 
     .pd-pend {
         border-top: 1px solid var(--pd-line);
         border-left: 0;
+    }
+
+    /* clear of the divider's touch target */
+    .pd-bar-map {
+        bottom: calc(var(--pd-gap) + 0.5rem);
+    }
+
+    .pd-scrub {
+        bottom: calc(var(--pd-gap) * 2 + 3.6rem);
+    }
+
+    .pd-readout {
+        top: calc(var(--pd-gap) + 0.5rem);
     }
 
     :root {
@@ -379,6 +537,10 @@ body {
         display: none;
     }
 
+    .pd-status {
+        top: calc(var(--pd-gap) * 2 + 2.95rem);
+    }
+
     .pd-status-hint {
         display: none;
     }
@@ -393,7 +555,10 @@ body {
         top: auto;
         bottom: var(--pd-gap);
         width: calc(100% - 2 * var(--pd-gap));
-        max-height: calc(45% - 2 * var(--pd-gap));
+        max-height: max(
+            40%,
+            calc(100% - var(--split, 55%) - 2 * var(--pd-gap))
+        );
     }
 }
 

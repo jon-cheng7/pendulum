@@ -8,6 +8,7 @@ import {
     SNAPSHOT_T,
     STEPS,
     type Grid,
+    type Look,
     type MapEngine,
 } from './engine.ts';
 import seedSrc from './seed.frag.glsl?raw';
@@ -113,6 +114,16 @@ export function createGlMap(canvas: HTMLCanvasElement): MapEngine | null {
     // vsync interval, learnt from the quickest frames
     let base = 1000 / 60;
     let query: WebGLQuery | null = null;
+    let look: Look = { scrub: null, mode: 'time' };
+    let prevSize = { w: 0, h: 0 };
+
+    function makePrev(w: number, h: number): void {
+        if (prevTex) gl.deleteTexture(prevTex);
+        if (prevFbo) gl.deleteFramebuffer(prevFbo);
+        prevTex = texture(gl.R32F, w, h);
+        prevFbo = framebuffer(prevTex);
+        prevSize = { w, h };
+    }
 
     function free(): void {
         if (sides) {
@@ -123,8 +134,6 @@ export function createGlMap(canvas: HTMLCanvasElement): MapEngine | null {
                 gl.deleteFramebuffer(s.read);
             }
         }
-        if (prevTex) gl.deleteTexture(prevTex);
-        if (prevFbo) gl.deleteFramebuffer(prevFbo);
     }
 
     function allocate(w: number, h: number): void {
@@ -140,9 +149,8 @@ export function createGlMap(canvas: HTMLCanvasElement): MapEngine | null {
             };
         };
         sides = [make(), make()];
-        prevTex = texture(gl.R32F, w, h);
-        prevFbo = framebuffer(prevTex);
-        prev = null;
+        // keep a prior that's still standing in
+        if (!prev) makePrev(w, h);
     }
 
     function fullscreen(): void {
@@ -153,6 +161,9 @@ export function createGlMap(canvas: HTMLCanvasElement): MapEngine | null {
         if (!sides || !cur || cur.w !== grid.w || cur.h !== grid.h) {
             allocate(grid.w, grid.h);
         } else if (done || steps * DT >= SNAPSHOT_T) {
+            if (prevSize.w !== grid.w || prevSize.h !== grid.h) {
+                makePrev(grid.w, grid.h);
+            }
             gl.bindFramebuffer(gl.READ_FRAMEBUFFER, sides[side].read);
             gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, prevFbo);
             gl.blitFramebuffer(
@@ -274,6 +285,8 @@ export function createGlMap(canvas: HTMLCanvasElement): MapEngine | null {
         gl.uniform1i(draw.u('uPrevValid'), prev ? 1 : 0);
         gl.uniform1f(draw.u('uT'), Math.min(T_MAX, steps * DT));
         gl.uniform1f(draw.u('uTMax'), T_MAX);
+        gl.uniform1f(draw.u('uScrub'), look.scrub ?? T_MAX);
+        gl.uniform1i(draw.u('uMode'), look.mode === 'arm' ? 1 : 0);
         fullscreen();
         return !done;
     }
@@ -281,6 +294,32 @@ export function createGlMap(canvas: HTMLCanvasElement): MapEngine | null {
     return {
         name: 'WEBGL2',
         setGrid,
+        setLook(next) {
+            look = next;
+        },
+        setPrior(grid, data) {
+            if (prev) return;
+            makePrev(grid.w, grid.h);
+            // GL rows run bottom up
+            const flipped = new Float32Array(data.length);
+            for (let j = 0; j < grid.h; j++) {
+                const from = (grid.h - 1 - j) * grid.w;
+                flipped.set(data.subarray(from, from + grid.w), j * grid.w);
+            }
+            gl.bindTexture(gl.TEXTURE_2D, prevTex);
+            gl.texSubImage2D(
+                gl.TEXTURE_2D,
+                0,
+                0,
+                0,
+                grid.w,
+                grid.h,
+                gl.RED,
+                gl.FLOAT,
+                flipped,
+            );
+            prev = grid;
+        },
         frame,
         get t() {
             return Math.min(T_MAX, steps * DT);

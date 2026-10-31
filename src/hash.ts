@@ -1,9 +1,10 @@
-// Shareable state in the URL hash: #v=cx,cy,zoom&p=θ₁,θ₂&twin
+// Shareable state in the URL hash: #v=cx,cy,zoom&p=θ₁,θ₂&twin&arm
 
 export interface Shared {
     view: { cx: number; cy: number; zoom: number } | null;
     pick: [number, number] | null;
     twin: boolean;
+    arm: boolean;
 }
 
 function numbers(text: string | null, count: number): number[] | null {
@@ -22,6 +23,7 @@ export function parseHash(hash: string): Shared {
         view: v && v[2]! > 0 ? { cx: v[0]!, cy: v[1]!, zoom: v[2]! } : null,
         pick: p ? [p[0]!, p[1]!] : null,
         twin: params.has('twin'),
+        arm: params.has('arm'),
     };
 }
 
@@ -36,5 +38,6 @@ export function formatHash(s: Shared): string {
     }
     if (s.pick) parts.push(`p=${s.pick[0].toFixed(5)},${s.pick[1].toFixed(5)}`);
     if (s.twin) parts.push('twin');
+    if (s.arm) parts.push('arm');
     return parts.join('&');
 }

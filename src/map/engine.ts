@@ -13,10 +13,22 @@ export interface Grid {
     h: number;
 }
 
+/** colouring; scrub null = show everything known */
+export interface Look {
+    scrub: number | null;
+    mode: ColourMode;
+}
+
+export type ColourMode = 'time' | 'arm';
+
 export interface MapEngine {
     readonly name: string;
     /** restarts the run */
     setGrid(grid: Grid): void;
+    /** redraw needed after */
+    setLook(look: Look): void;
+    /** placeholder results for a grid, until the run catches up */
+    setPrior(grid: Grid, results: Float32Array): void;
     /** one frame of work + draw; false once finished */
     frame(frameMs: number | null): boolean;
     /** simulated time every live pixel has reached */
@@ -45,14 +57,20 @@ export function gridFor(view: View, css: Size, buffer: Size): Grid {
     };
 }
 
-/** cur + prev grids, dt, tMax, steps, prevValid */
-export const PARAMS_BYTES = 80;
+/** result = flip time + code · CODE_SPAN, code = arm · 2 + clockwise */
+export const CODE_SPAN = 2048;
+export const NEVER = -1;
+export const TIMEOUT = 1e9;
+
+/** cur + prev grids, dt, tMax, steps, prevValid, scrub, mode */
+export const PARAMS_BYTES = 96;
 
 export function writeParams(
     out: ArrayBuffer,
     cur: Grid,
     prev: Grid | null,
     tMax: number,
+    look: Look,
 ): void {
     const f = new Float32Array(out);
     const u = new Uint32Array(out);
@@ -70,6 +88,8 @@ export function writeParams(
     f[17] = tMax;
     u[18] = STEPS;
     u[19] = prev ? 1 : 0;
+    f[20] = look.scrub ?? tMax;
+    u[21] = look.mode === 'arm' ? 1 : 0;
 }
 
 /** AIMD on measured cost per frame */

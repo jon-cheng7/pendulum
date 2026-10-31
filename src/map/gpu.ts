@@ -10,8 +10,10 @@ import {
     adaptPasses,
     writeParams,
     type Grid,
+    type Look,
     type MapEngine,
 } from './engine.ts';
+import { PRIOR_N } from './prior.ts';
 import stepCode from './step.wgsl?raw';
 
 interface Buffers {
@@ -161,13 +163,29 @@ export async function createGpuMap(
     let reading = false;
     // results from an older run are stale
     let run = 0;
+    let look: Look = { scrub: null, mode: 'time' };
+    let prior: { grid: Grid; data: Float32Array } | null = null;
+
+    function writeAll(): void {
+        if (!cur) return;
+        writeParams(paramData, cur, prev, T_MAX, look);
+        device.queue.writeBuffer(params, 0, paramData);
+    }
+
+    function usePrior(): void {
+        if (!bufs || !prior) return;
+        device.queue.writeBuffer(bufs.prev, 0, prior.data);
+        prev = prior.grid;
+        prior = null;
+    }
 
     function allocate(n: number): Buffers {
         const make = (size: number, usage = STORAGE) =>
             device.createBuffer({ size, usage });
         const state = make(n * 16);
         const result = make(n * 4);
-        const prevBuf = make(n * 4);
+        // also holds the prior, which can be bigger
+        const prevBuf = make(Math.max(n, PRIOR_N * PRIOR_N) * 4);
         const list: [GPUBuffer, GPUBuffer] = [make(n * 4), make(n * 4)];
         const metaUsage = STORAGE | SU.INDIRECT;
         const meta: [GPUBuffer, GPUBuffer] = [
@@ -237,6 +255,7 @@ export async function createGpuMap(
             if (bufs) release(bufs);
             bufs = allocate(n);
             prev = null;
+            usePrior();
         } else if (done || steps * DT >= SNAPSHOT_T) {
             const enc = device.createCommandEncoder();
             enc.copyBufferToBuffer(bufs.result, 0, bufs.prev, 0, n * 4);
@@ -244,8 +263,7 @@ export async function createGpuMap(
             prev = cur;
         }
         cur = grid;
-        writeParams(paramData, grid, prev, T_MAX);
-        device.queue.writeBuffer(params, 0, paramData);
+        writeAll();
         device.queue.writeBuffer(bufs.meta[0], 0, zero);
         device.queue.writeBuffer(bufs.meta[1], 0, zero);
         device.queue.writeBuffer(clock, 0, zero, 0, 1);
@@ -351,6 +369,17 @@ export async function createGpuMap(
     return {
         name: 'WEBGPU',
         setGrid,
+        setLook(next) {
+            look = next;
+            writeAll();
+        },
+        setPrior(grid, data) {
+            // a real result already beats it
+            if (prev) return;
+            prior = { grid, data };
+            usePrior();
+            writeAll();
+        },
         frame: () => frame(),
         get t() {
             return Math.min(T_MAX, steps * DT);
