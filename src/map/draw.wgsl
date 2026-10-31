@@ -109,7 +109,8 @@ fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         return select(vec4f(0.15, 0.15, 0.15, 1.0), running, scrubbing);
     }
     let d = decode(r);
-    if (scrubbing && d.x > shown) {
+    // known flips, live or borrowed, show up to the slider
+    if (scrubbing && d.x > P.scrub) {
         return running;
     }
     if (P.mode == 1u) {

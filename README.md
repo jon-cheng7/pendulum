@@ -14,7 +14,7 @@ pnpm build      # type-checks, then builds to dist/
 pnpm home-map   # recomputes public/home-map.bin, about a minute
 ```
 
-Controls: click or tap the map to pick a start, drag to pan, scroll or pinch to zoom, double-click to zoom in. Hover the map to see that start's pose. Drag either bob to set a start by hand. The slider under the map shows only the flips that have happened by a given time; ▶ replays the map filling in.
+Controls: click or tap the map to pick a start, drag to pan, scroll or pinch to zoom, double-click to zoom in. Hover the map to see that start's pose. Drag either bob to set a start by hand. The slider under the map shows only the flips that have happened by a given time; ▶ replays the map filling in, and every load opens with that replay.
 
 Keys: `L` lessons, `C` calm-region curve, `V` colour by time or by which arm flips, `T` twin, `space` play/pause, `R` restart, `S` speed, `0` reset view, `+` / `-` zoom, arrows pan, `H` engine stats (on by default in dev).
 

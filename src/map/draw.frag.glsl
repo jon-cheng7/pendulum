@@ -82,7 +82,8 @@ void main() {
         oColor = scrubbing ? running : vec4(0.15, 0.15, 0.15, 1.0);
     } else {
         vec2 d = decode(r);
-        if (scrubbing && d.x > shown) oColor = running;
+        // known flips, live or borrowed, show up to the slider
+        if (scrubbing && d.x > uScrub) oColor = running;
         else if (uMode == 1) oColor = vec4(armColour(d.y, d.x), 1.0);
         else oColor = vec4(palette(d.x), 1.0);
     }

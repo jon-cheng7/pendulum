@@ -106,11 +106,7 @@ async function start(root: HTMLElement): Promise<void> {
         },
         toggleScrubPlay: () => {
             if (replayFrom !== null) stopReplay();
-            else {
-                replayFrom = performance.now();
-                ui.setScrubPlaying(true);
-                loop.request();
-            }
+            else startReplay();
         },
     });
 
@@ -137,8 +133,7 @@ async function start(root: HTMLElement): Promise<void> {
         }
         if (replayFrom !== null) {
             const log = (3 * (performance.now() - replayFrom)) / REPLAY_MS;
-            const reached = engine?.t ?? 0;
-            if (log >= 3 || 10 ** log >= reached) {
+            if (log >= 3) {
                 stopReplay();
                 setLook({ ...look, scrub: null });
             } else {
@@ -174,6 +169,12 @@ async function start(root: HTMLElement): Promise<void> {
         engine?.setLook(look);
         mapRedraw = true;
         loop.request();
+    }
+
+    function startReplay(): void {
+        replayFrom = performance.now();
+        setLook({ ...look, scrub: 1 });
+        ui.setScrubPlaying(true);
     }
 
     function stopReplay(): void {
@@ -521,6 +522,8 @@ async function start(root: HTMLElement): Promise<void> {
     viewDirty = true;
     engine?.setLook(look);
     loop.request();
+    // every load opens on the map filling in
+    if (engine) startReplay();
     void prior.then((data) => {
         if (!data || !engine) return;
         engine.setPrior(PRIOR_GRID, data);
