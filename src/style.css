@@ -1,0 +1,404 @@
+/* pd- prefix: no clashes with the host site */
+
+:root {
+    --pd-bg: #0a0a0a;
+    --pd-fg: #e5e5e5;
+    --pd-muted: #8a8a8a;
+    --pd-line: rgba(255, 255, 255, 0.15);
+    --pd-line-strong: rgba(255, 255, 255, 0.4);
+    --pd-panel: rgba(10, 10, 10, 0.92);
+    --pd-accent: #c5fb45;
+    --pd-cyan: #45f0fb;
+    --pd-mono:
+        'Geist Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    --pd-gap: 0.75rem;
+    --pd-radius: 10px;
+    color-scheme: dark;
+}
+
+html,
+body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    background-color: var(--pd-bg);
+}
+
+/* blueprint grid shows outside the square */
+body {
+    background-image:
+        linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+        linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+    background-size:
+        120px 120px,
+        120px 120px,
+        24px 24px,
+        24px 24px;
+    color: var(--pd-fg);
+    font-family: var(--pd-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.pd-app {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 40%);
+    height: 100%;
+}
+
+.pd-map,
+.pd-pend {
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    outline: none;
+}
+
+.pd-map {
+    cursor: crosshair;
+}
+
+.pd-pend {
+    border-left: 1px solid var(--pd-line);
+    background: rgba(10, 10, 10, 0.75);
+}
+
+.pd-canvas,
+.pd-overlay,
+.pd-trail,
+.pd-arms {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.pd-overlay {
+    pointer-events: none;
+}
+
+/* no backdrop blur: canvases redraw every frame */
+.pd-brand,
+.pd-bar,
+.pd-status,
+.pd-readout,
+.pd-learn {
+    border: 1px solid var(--pd-line);
+    border-radius: var(--pd-radius);
+    background: var(--pd-panel);
+}
+
+/* Buttons */
+
+.pd-btn {
+    min-width: 2.25rem;
+    height: 2.25rem;
+    padding: 0 0.8rem;
+    border: 1px solid var(--pd-line);
+    border-radius: 7px;
+    background: transparent;
+    color: var(--pd-fg);
+    font: inherit;
+    letter-spacing: 0.1em;
+    white-space: nowrap;
+    cursor: pointer;
+    touch-action: manipulation;
+    transition:
+        border-color 0.15s,
+        color 0.15s,
+        background-color 0.15s;
+}
+
+.pd-btn:hover {
+    border-color: var(--pd-line-strong);
+}
+
+.pd-btn:active {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.pd-btn:focus-visible {
+    outline: 1px solid var(--pd-accent);
+    outline-offset: 1px;
+}
+
+.pd-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.pd-btn[aria-pressed='true'] {
+    border-color: var(--pd-accent);
+    color: var(--pd-accent);
+}
+
+.pd-btn-primary {
+    border-color: var(--pd-accent);
+    color: var(--pd-accent);
+}
+
+.pd-btn-square {
+    padding: 0;
+    font-size: 1.05rem;
+}
+
+/* Map chrome */
+
+.pd-brand {
+    position: absolute;
+    top: var(--pd-gap);
+    left: var(--pd-gap);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.35rem 0.35rem 0.35rem 0.85rem;
+}
+
+.pd-brand-name {
+    margin: 0;
+    font-size: inherit;
+    font-weight: 400;
+    letter-spacing: 0.14em;
+}
+
+.pd-bar {
+    position: absolute;
+    display: flex;
+    gap: 0.35rem;
+    padding: 0.35rem;
+}
+
+.pd-bar-map {
+    bottom: var(--pd-gap);
+    left: var(--pd-gap);
+}
+
+.pd-bar-pend {
+    bottom: var(--pd-gap);
+    left: 50%;
+    translate: -50% 0;
+}
+
+.pd-status {
+    position: absolute;
+    right: var(--pd-gap);
+    /* clear of the button bar */
+    bottom: calc(var(--pd-gap) * 2 + 3.1rem);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.25rem;
+    max-width: calc(100% - 2 * var(--pd-gap));
+    margin: 0;
+    padding: 0.5rem 0.75rem;
+    box-sizing: border-box;
+    pointer-events: none;
+}
+
+.pd-status:empty {
+    display: none;
+}
+
+.pd-status-hint {
+    color: var(--pd-muted);
+}
+
+.pd-map[data-failed] .pd-status {
+    left: var(--pd-gap);
+    bottom: 50%;
+    align-items: center;
+    color: var(--pd-accent);
+}
+
+/* Pendulum chrome */
+
+.pd-readout {
+    position: absolute;
+    top: var(--pd-gap);
+    left: var(--pd-gap);
+    display: grid;
+    gap: 0.3rem;
+    margin: 0;
+    padding: 0.55rem 0.75rem;
+    pointer-events: none;
+}
+
+.pd-readout:empty {
+    display: none;
+}
+
+.pd-readout div {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.pd-readout dt {
+    width: 3.5rem;
+    color: var(--pd-muted);
+}
+
+.pd-readout dd {
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Lessons */
+
+.pd-learn {
+    position: absolute;
+    /* sits over a moving trail */
+    background: var(--pd-bg);
+    top: calc(var(--pd-gap) * 2 + 3rem);
+    left: var(--pd-gap);
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    width: min(380px, calc(100% - 2 * var(--pd-gap)));
+    max-height: calc(100% - var(--pd-gap) * 4 - 6rem);
+    padding: 0.9rem;
+    box-sizing: border-box;
+}
+
+.pd-learn[hidden] {
+    display: none;
+}
+
+.pd-learn-head,
+.pd-learn-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.pd-learn-count {
+    color: var(--pd-muted);
+}
+
+.pd-learn-title {
+    margin: 0;
+    font-size: 0.85rem;
+    font-weight: 400;
+    letter-spacing: 0.14em;
+    color: var(--pd-accent);
+}
+
+.pd-learn-body {
+    min-height: 0;
+    overflow-y: auto;
+    font-family: system-ui, sans-serif;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    letter-spacing: 0;
+    overscroll-behavior: contain;
+}
+
+.pd-learn-body p {
+    margin: 0 0 0.7em;
+}
+
+.pd-learn-body math {
+    margin: 0.4em 0 0.8em;
+    font-size: 1.05em;
+}
+
+.pd-learn-try {
+    margin: 0;
+    color: var(--pd-cyan);
+}
+
+.pd-learn-try[hidden] {
+    display: none;
+}
+
+.pd-learn-dots {
+    display: flex;
+    gap: 0.1rem;
+}
+
+.pd-learn-dot {
+    position: relative;
+    width: 1.1rem;
+    height: 2.25rem;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+}
+
+.pd-learn-dot::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--pd-line-strong);
+    translate: -50% -50%;
+}
+
+.pd-learn-dot[aria-current='true']::before {
+    background: var(--pd-accent);
+}
+
+/* Phones: map on top, pendulum below */
+
+@media (max-width: 760px) {
+    .pd-app {
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(0, 55fr) minmax(0, 45fr);
+    }
+
+    .pd-pend {
+        border-top: 1px solid var(--pd-line);
+        border-left: 0;
+    }
+
+    :root {
+        --pd-gap: 0.5rem;
+    }
+
+    .pd-brand {
+        padding-left: 0.65rem;
+    }
+
+    /* pinch replaces the zoom buttons */
+    .pd-bar-map .pd-btn:nth-child(-n + 2),
+    .pd-bar-map .pd-btn:last-child {
+        display: none;
+    }
+
+    .pd-status-hint {
+        display: none;
+    }
+
+    .pd-bar-pend {
+        width: max-content;
+        max-width: calc(100% - 2 * var(--pd-gap));
+        overflow-x: auto;
+    }
+
+    .pd-learn {
+        top: auto;
+        bottom: var(--pd-gap);
+        width: calc(100% - 2 * var(--pd-gap));
+        max-height: calc(45% - 2 * var(--pd-gap));
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .pd-btn {
+        transition: none;
+    }
+}
