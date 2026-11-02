@@ -84,7 +84,9 @@ body {
     object-fit: cover;
 }
 
-.pd-split {
+.pd-split,
+.pd-info,
+.pd-reset-icon {
     display: none;
 }
 
@@ -519,10 +521,6 @@ body {
         bottom: calc(var(--pd-gap) * 2 + 3.6rem);
     }
 
-    .pd-readout {
-        top: calc(var(--pd-gap) + 0.5rem);
-    }
-
     :root {
         --pd-gap: 0.5rem;
     }
@@ -531,14 +529,72 @@ body {
         padding-left: 0.65rem;
     }
 
-    /* pinch replaces the zoom buttons */
-    .pd-bar-map .pd-btn:nth-child(-n + 2),
-    .pd-bar-map .pd-btn:last-child {
+    /* as little chrome as possible: learn, a reset icon, the readout toggle */
+    .pd-brand-name,
+    .pd-scrub,
+    .pd-bar-map .pd-btn:not(.pd-reset),
+    .pd-reset-label {
         display: none;
     }
 
-    .pd-status {
-        top: calc(var(--pd-gap) * 2 + 2.95rem);
+    .pd-brand {
+        padding: 0;
+        border: 0;
+        background: none;
+    }
+
+    .pd-brand .pd-btn,
+    .pd-reset,
+    .pd-info {
+        background: var(--pd-panel);
+    }
+
+    .pd-bar-map {
+        padding: 0;
+        border: 0;
+        background: none;
+    }
+
+    .pd-reset,
+    .pd-info {
+        display: grid;
+        place-items: center;
+        min-width: 0;
+        width: 2rem;
+        height: 2rem;
+        padding: 0;
+        border-radius: 50%;
+        color: var(--pd-muted);
+    }
+
+    .pd-reset-icon {
+        display: block;
+        font-size: 1rem;
+        line-height: 1;
+    }
+
+    .pd-info {
+        position: absolute;
+        top: calc(var(--pd-gap) + 0.5rem);
+        left: var(--pd-gap);
+        font-size: 0.75rem;
+    }
+
+    .pd-readout {
+        display: none;
+        /* beside its toggle */
+        top: calc(var(--pd-gap) + 0.5rem);
+        left: calc(var(--pd-gap) + 2.5rem);
+        padding: 0.4rem 0.6rem;
+        font-size: 0.6rem;
+    }
+
+    .pd-pend[data-readout] .pd-readout {
+        display: grid;
+    }
+
+    .pd-readout dt {
+        width: 2.75rem;
     }
 
     .pd-status-hint {

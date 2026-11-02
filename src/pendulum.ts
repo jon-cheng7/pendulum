@@ -21,6 +21,8 @@ export interface Run {
     pathHead: number;
     /** last trail point, CSS px */
     last: [number, number] | null;
+    /** trail so far in arm lengths from the pivot, for redrawing at a new size */
+    trail: number[];
 }
 
 export interface Pendulum {
@@ -48,6 +50,12 @@ const MAX_STEPS_PER_TICK = 6000;
 const HIT_PX = 32;
 const MAX_DPR = 2;
 const RESIZE_MS = 120;
+// pause bar plus its gap, CSS px
+const BAR_SPACE = 64;
+// x, y pairs kept per run; oldest dropped past this
+const TRAIL_CAP = 600_000;
+// redraw in short strokes: overlaps between strokes add up under 'lighter', like the live trail
+const REDRAW_CHUNK = 16;
 
 const LIME = '#c5fb45';
 const CYAN = '#45f0fb';
@@ -63,6 +71,7 @@ function newRun(t1: number, t2: number): Run {
         pathLen: 0,
         pathHead: 0,
         last: null,
+        trail: [],
     };
 }
 
@@ -99,8 +108,10 @@ export function createPendulum(
     let dirty = true;
     let ghost: [number, number] | null = null;
 
-    const arm = (): number => Math.min(w, h) * 0.22;
-    const pivot = (): [number, number] => [w / 2, h / 2];
+    // swing centred in the space above the button bar
+    const free = (): number => Math.max(1, h - BAR_SPACE);
+    const arm = (): number => Math.min(w, free()) * 0.22;
+    const pivot = (): [number, number] => [w / 2, free() / 2];
 
     function bobs(s: State): [[number, number], [number, number]] {
         const [px, py] = pivot();
@@ -114,12 +125,6 @@ export function createPendulum(
     }
 
     function resize(): void {
-        const oldArm = arm() * dpr;
-        const old = document.createElement('canvas');
-        old.width = trail.width;
-        old.height = trail.height;
-        old.getContext('2d')?.drawImage(trail, 0, 0);
-
         w = Math.max(1, root.clientWidth);
         h = Math.max(1, root.clientHeight);
         dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
@@ -128,21 +133,39 @@ export function createPendulum(
             c.height = Math.round(h * dpr);
         }
         armsCtx?.setTransform(dpr, 0, 0, dpr, 0, 0);
-        if (trailCtx) {
-            // keep the trail: scale it about the pivot
-            const k = (arm() * dpr) / oldArm;
-            trailCtx.setTransform(1, 0, 0, 1, 0, 0);
-            trailCtx.drawImage(
-                old,
-                trail.width / 2 - (old.width / 2) * k,
-                trail.height / 2 - (old.height / 2) * k,
-                old.width * k,
-                old.height * k,
-            );
-            trailCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        }
-        for (const run of runs) run.last = null;
+        trailCtx?.setTransform(dpr, 0, 0, dpr, 0, 0);
+        redrawTrail();
         dirty = true;
+    }
+
+    // crisp at the new size, not a scaled bitmap
+    function redrawTrail(): void {
+        if (!trailCtx) return;
+        trailCtx.clearRect(0, 0, w, h);
+        trailCtx.globalCompositeOperation = 'lighter';
+        trailCtx.lineWidth = 1.2;
+        trailCtx.lineJoin = 'round';
+        const [px, py] = pivot();
+        const l = arm();
+        for (let i = runs.length - 1; i >= 0; i--) {
+            const run = runs[i];
+            if (!run) continue;
+            run.last = null;
+            const pts = run.trail;
+            if (pts.length < 4) continue;
+            trailCtx.strokeStyle = TRAILS[i] ?? TRAILS[0]!;
+            for (let k = 0; k < pts.length - 2; k += REDRAW_CHUNK * 2) {
+                trailCtx.beginPath();
+                trailCtx.moveTo(px + pts[k]! * l, py + pts[k + 1]! * l);
+                const end = Math.min(pts.length, k + REDRAW_CHUNK * 2 + 2);
+                for (let j = k + 2; j < end; j += 2) {
+                    trailCtx.lineTo(px + pts[j]! * l, py + pts[j + 1]! * l);
+                }
+                trailCtx.stroke();
+            }
+            const n = pts.length;
+            run.last = [px + pts[n - 2]! * l, py + pts[n - 1]! * l];
+        }
     }
 
     // first size now, later ones once a drag settles
@@ -155,7 +178,10 @@ export function createPendulum(
 
     function clearTrail(): void {
         trailCtx?.clearRect(0, 0, w, h);
-        for (const run of runs) run.last = null;
+        for (const run of runs) {
+            run.last = null;
+            run.trail = [];
+        }
     }
 
     function start(t1: number, t2: number): void {
@@ -174,6 +200,8 @@ export function createPendulum(
         trailCtx.globalCompositeOperation = 'lighter';
         trailCtx.lineWidth = 1.2;
         trailCtx.lineJoin = 'round';
+        const [px, py] = pivot();
+        const l = arm();
         // twin underneath
         for (let i = points.length - 1; i >= 0; i--) {
             const run = runs[i];
@@ -183,9 +211,16 @@ export function createPendulum(
             trailCtx.beginPath();
             const from = run.last ?? line[0]!;
             trailCtx.moveTo(from[0], from[1]);
-            for (const [x, y] of line) trailCtx.lineTo(x, y);
+            if (run.trail.length === 0)
+                run.trail.push((from[0] - px) / l, (from[1] - py) / l);
+            for (const [x, y] of line) {
+                trailCtx.lineTo(x, y);
+                run.trail.push((x - px) / l, (y - py) / l);
+            }
             trailCtx.stroke();
             run.last = line[line.length - 1] ?? run.last;
+            if (run.trail.length > TRAIL_CAP)
+                run.trail.splice(0, TRAIL_CAP / 4);
         }
     }
 

@@ -21,6 +21,8 @@ const SPAN = 2 * Math.PI;
 const MARGIN = 1.08;
 // past this float32 can't tell neighbouring pixels apart
 export const MAX_ZOOM = 2000;
+// room to zoom out past the whole square
+const MIN_ZOOM = 0.6;
 
 export function fitView(size: Size): View {
     return {
@@ -37,7 +39,10 @@ export function zoomLevel(view: View, size: Size): number {
 /** keep some of the square on screen */
 function clamp(view: View, size: Size): View {
     const fit = fitView(size).scale;
-    const scale = Math.min(fit, Math.max(fit / MAX_ZOOM, view.scale));
+    const scale = Math.min(
+        fit / MIN_ZOOM,
+        Math.max(fit / MAX_ZOOM, view.scale),
+    );
     const cx = Math.min(Math.PI, Math.max(-Math.PI, view.cx));
     const cy = Math.min(Math.PI, Math.max(-Math.PI, view.cy));
     return { cx, cy, scale };

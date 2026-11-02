@@ -33,6 +33,8 @@ const START: [number, number] = [0.9, 1.7];
 const READOUT_MS = 100;
 const GPU_WAIT_MS = 4000;
 const RESIZE_MS = 120;
+// phone layout, matches style.css
+const NARROW = '(max-width: 760px)';
 // replay: 1 → 1000 time units
 const REPLAY_MS = 7000;
 
@@ -531,8 +533,8 @@ async function start(root: HTMLElement): Promise<void> {
         loop.request();
     });
 
-    // first visit, no link: open lessons
-    if (!shared.pick) learn.toggle();
+    // first visit on a big screen, no link: open lessons
+    if (!shared.pick && !matchMedia(NARROW).matches) learn.toggle();
 }
 
 const root = document.querySelector<HTMLElement>('#pd-app');

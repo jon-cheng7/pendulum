@@ -73,6 +73,17 @@ export function createUi(map: HTMLElement, pend: HTMLElement, a: Actions): Ui {
     brand.append(name, learn);
 
     const mapBar = box('pd-bar pd-bar-map');
+    const reset = button('', 'Whole map (0)', a.reset);
+    reset.classList.add('pd-reset');
+    reset.setAttribute('aria-label', 'Reset view');
+    const resetIcon = document.createElement('span');
+    resetIcon.className = 'pd-reset-icon';
+    resetIcon.textContent = '⟲';
+    resetIcon.setAttribute('aria-hidden', 'true');
+    const resetLabel = document.createElement('span');
+    resetLabel.className = 'pd-reset-label';
+    resetLabel.textContent = 'RESET';
+    reset.append(resetIcon, resetLabel);
     const zoomOut = button('−', 'Zoom out (-)', a.zoomOut);
     const zoomIn = button('+', 'Zoom in (+)', a.zoomIn);
     zoomOut.classList.add('pd-btn-square');
@@ -84,14 +95,7 @@ export function createUi(map: HTMLElement, pend: HTMLElement, a: Actions): Ui {
         'Colour by time or by which arm flips (V)',
         a.cycleColour,
     );
-    mapBar.append(
-        zoomOut,
-        zoomIn,
-        button('RESET', 'Whole map (0)', a.reset),
-        curve,
-        colour,
-        stats,
-    );
+    mapBar.append(zoomOut, zoomIn, reset, curve, colour, stats);
 
     // log time slider, track doubles as the legend
     const scrubRow = box('pd-scrub');
@@ -135,6 +139,15 @@ export function createUi(map: HTMLElement, pend: HTMLElement, a: Actions): Ui {
 
     const readout = document.createElement('dl');
     readout.className = 'pd-readout';
+    // phones: readouts hide behind a small toggle
+    const info = button('i', 'Show readouts', () => {
+        const open = pend.toggleAttribute('data-readout');
+        info.setAttribute('aria-pressed', String(open));
+    });
+    info.classList.add('pd-info');
+    info.setAttribute('aria-label', 'Readouts');
+    info.setAttribute('aria-pressed', 'false');
+    info.dataset.pdUi = '';
 
     const pendBar = box('pd-bar pd-bar-pend');
     const play = button('PAUSE', 'Play / pause (space)', a.togglePlay);
@@ -151,7 +164,7 @@ export function createUi(map: HTMLElement, pend: HTMLElement, a: Actions): Ui {
         speed,
         button('CLEAR', 'Wipe the trail', a.clearTrail),
     );
-    pend.append(readout, pendBar);
+    pend.append(info, readout, pendBar);
 
     const toggles: Record<Toggle, HTMLButtonElement> = {
         learn,
